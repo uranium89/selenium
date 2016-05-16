@@ -1,0 +1,19 @@
+{
+  "name": "selenium",
+  "version": "1.0.0",
+  "description": "automated by nodejs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uranium89/selenium.git"
+  },
+  "author": "vinh pham",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/uranium89/selenium/issues"
+  },
+  "homepage": "https://github.com/uranium89/selenium#readme"
+}
