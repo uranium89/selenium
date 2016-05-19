@@ -1,5 +1,7 @@
 # selenium
 Run this code 
+
+node install
 node app.js https://your-intance.service-now.com/ username password "Jenkin_folder"
 
 Release note format: release_note.txt
