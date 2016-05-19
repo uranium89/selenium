@@ -11,7 +11,8 @@ var browser = new webdriver.Builder().usingServer().withCapabilities({
 }).build();
 
 var timeout = 20000;
-var delay = 1000;
+var delay = 5000;
+
 
 exports.deploy = function(server, username, password, path) {
     var config = {
@@ -19,7 +20,7 @@ exports.deploy = function(server, username, password, path) {
         username: username,
         password: password
     };
-   
+
 
     //login page
     browser.get(server + 'welcome.do').then(function() {
@@ -59,30 +60,52 @@ exports.deploy = function(server, username, password, path) {
         })
     });
 
-
-
-
-
     browser.get(server + 'sys_remote_update_set_list.do?sysparm_query=sys_class_name%3Dsys_remote_update_set%5Estate%3Dloaded');
     browser.wait(function() {
         console.log("updated sets list loaded");
         return browser.isElementPresent(webdriver.By.id('0583c6760a0a0b8000d06ad9224a81a2'));
     }, timeout).then(function() {
+
+        //read relase notes
+        var tmpArrIds = fs.readFileSync(path + 'release_note.txt').toString().split("\r");
+        var arrIds = [];
+        tmpArrIds.forEach(function(item) {
+            var us_name = item.replace('\n', '');
+            if (us_name.length > 0) {
+                arrIds.push(us_name);
+            }
+        })
+
         var client = new servicenow.Client(config);
         client.getRecords("sys_remote_update_set", "state=loaded", function(error, result) {
             if (!error) {
+                var records = [];
+                //has release note
+                if (arrIds.length > 0) {
+                    arrIds.forEach(function(us_name) {
+                        result.records.forEach(function(r) {
+                            if (r.name == us_name) {
+                                records.push(r);
+                            }
+                        })
+                    })
+                } else {
+                    //realse all updpate sets
+                    records = result.records;
+                }
+
                 // call succeded 
-                result.records.forEach(function(item) {
+                records.forEach(function(item) {
                     var sys_id = item.sys_id;
                     var name = item.name;
-                    var fileName = path + sys_id + "_" + name.replace(' ', '_') + ".txt";
-                    var content = 'Update set committed at ' + new Date();
-                    console.log(sys_id);
+                    var fileName = path + "logs//" + sys_id + "_" + name.replace(' ', '_') + ".txt";
+                    var content = 'Update set ' + name + ' committed at ' + new Date();
+
                     browser.get(server + 'sys_remote_update_set.do?sys_id=' + sys_id);
 
                     //preview update set
                     browser.executeScript("document.getElementById('preview_update_set').click()");
-                    browser.sleep(timeout);
+                    browser.sleep(delay);
                     //preview has error
                     browser.isElementPresent(webdriver.By.id("hierarchical_progress_viewer")).then(function(result) {
                         if (result) {
