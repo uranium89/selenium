@@ -14,13 +14,13 @@ var timeout = 20000;
 var delay = 5000;
 
 
-exports.deploy = function(server, username, password, path, log) {
+exports.deploy = function(server, srcServer, username, password, path, log) {
     var config = {
         instance: server,
         username: username,
         password: password
     };
-
+    var client = new servicenow.Client(config);
 
     //login page
     browser.get(server + 'welcome.do').then(function() {
@@ -37,126 +37,122 @@ exports.deploy = function(server, username, password, path, log) {
         console.log("home page loaded");
         return browser.isElementPresent(webdriver.By.id('gsft_full_name'));
     }, timeout);
-
-    //remote instance
     browser.get(server + 'sys_update_set_source_list.do');
     browser.wait(function() {
         console.log("remote instance loaded");
         return browser.isElementPresent(webdriver.By.id('sysverb_new'));
-    });
-    //select all instance
-    browser.executeScript("document.getElementById('allcheck_sys_update_set_source').click()");
-
-    var element = browser.findElement(webdriver.By.xpath("//select[@class='list_action_option form-control ']"));
-    element.click().then(function() {
-        element.findElement(webdriver.By.id("c2ca3de40a0a0b5000795879b46a69b5")).click().then(function() {
-            var isPageRefresh = false;
-            browser.wait(function() {
-                browser.executeScript("return document.getElementById('allcheck_sys_update_set_source').checked").then(function(checked) {
-                    isPageRefresh = !checked;
-                });
-                return isPageRefresh;
-            }, timeout);
-        })
-    });
-
-    browser.get(server + 'sys_remote_update_set_list.do?sysparm_query=sys_class_name%3Dsys_remote_update_set%5Estate%3Dloaded');
-    browser.wait(function() {
-        console.log("updated sets list loaded");
-        return browser.isElementPresent(webdriver.By.id('0583c6760a0a0b8000d06ad9224a81a2'));
-    }, timeout).then(function() {
-
-        //read relase notes
-        var tmpArrIds = fs.readFileSync(path + 'release_note.txt').toString().split("\r");
-        var arrIds = [];
-        tmpArrIds.forEach(function(item) {
-            var us_name = item.replace('\n', '');
-            if (us_name.length > 0) {
-                arrIds.push(us_name);
-            }
-        })
-
-        var client = new servicenow.Client(config);
-        client.getRecords("sys_remote_update_set", "state=loaded", function(error, result) {
+    }).then(function() {
+        //remote instance
+        client.getRecords("sys_update_set_source_list", "URL=" + srcServer, function(error, svrs) {
             if (!error) {
-                var records = [];
-                //has release note
-                if (arrIds.length > 0) {
-                    arrIds.forEach(function(us_name) {
-                        result.records.forEach(function(r) {
-                            if (r.name == us_name) {
-                                records.push(r);
-                            }
-                        })
-                    })
-                } else {
-                    //realse all updpate sets
-                    records = result.records;
-                }
-
                 // call succeded 
-                records.forEach(function(item) {
-                    var sys_id = item.sys_id;
-                    var name = item.name;
-                    var fileName = log + sys_id + "_" + name.replace(' ', '_') + ".txt";
-                    var content = 'Update set ' + name + ' committed at ' + new Date();
+                svrs.records.forEach(function(s) {
+                    browser.get(server + 'sys_update_set_source.do?sys_id=' + s.sys_id);
+                    browser.findElement(webdriver.By.id("c2ca3de40a0a0b5000795879b46a69b5")).click();
+                    browser.executeScript("document.getElementById('sys_update_set_source.url_unlock').click()");
+                    var isPageRefresh = false;
+                    browser.wait(function() {
+                        browser.executeScript("return document.getElementById('sys_update_set_source.url_unlock').style.display=='none'").then(function(checked) {
+                            isPageRefresh = !checked;
+                        });
+                        return isPageRefresh;
+                    }, timeout);
+                }, this);
+                //retrieve update`
+                browser.get(server + 'sys_remote_update_set_list.do?sysparm_query=sys_class_name%3Dsys_remote_update_set%5Estate%3Dloaded');
+                browser.wait(function() {
+                    console.log("updated sets list loaded");
+                    return browser.isElementPresent(webdriver.By.id('0583c6760a0a0b8000d06ad9224a81a2'));
+                }, timeout).then(function() {
 
-                    browser.get(server + 'sys_remote_update_set.do?sys_id=' + sys_id);
+                    //read relase notes
+                    var tmpArrIds = fs.readFileSync(path + 'release_note.txt').toString().split("\r");
+                    var arrIds = [];
+                    tmpArrIds.forEach(function(item) {
+                        var us_name = item.replace('\n', '');
+                        if (us_name.length > 0) {
+                            arrIds.push(us_name);
+                        }
+                    })
 
-                    //preview update set
-                    browser.executeScript("document.getElementById('preview_update_set').click()");
-                    browser.sleep(delay);
-                    //preview has error
-                    browser.isElementPresent(webdriver.By.id("hierarchical_progress_viewer")).then(function(result) {
-                        if (result) {
-                            client.getRecords("sys_update_preview_problem", "remote_update_set=" + sys_id, function(error, result) {
-                                if (!error) {
-                                    var data = result.records;
-                                    var problems = "Update set " + name + " has error: ";
-                                    data.forEach(function(element) {
-                                        problems += element.description;
-                                    }, this);
-                                    fs.writeFile(fileName, problems, function(err) {
-                                        if (err)
-                                            return console.log(err);
-                                        console.log(fileName);
-                                    });
-                                }
-                            });
 
-                        } else {
-                            //show commit button
-                            browser.isElementPresent(webdriver.By.id("c38b2cab0a0a0b5000470398d9e60c36")).then(function(result) {
-                                if (result) {
-                                    //commit update set
-                                    browser.executeScript("document.getElementsByClassName('form_action_button header  action_context btn btn-default')[3].click()");
-                                    browser.wait(function() {
-                                        return browser.isElementPresent(webdriver.By.id("sysparm_button_close"));
-                                    }, timeout);
-                                    browser.findElement(webdriver.By.id("sysparm_button_close")).click();
+                    client.getRecords("sys_remote_update_set", "state=loaded", function(error, result) {
+                        if (!error) {
+                            var records = [];
+                            //has release note
+                            if (arrIds.length > 0) {
+                                arrIds.forEach(function(us_name) {
+                                    result.records.forEach(function(r) {
+                                        if (r.name == us_name) {
+                                            records.push(r);
+                                        }
+                                    })
+                                })
+                            } else {
+                                //realse all updpate sets
+                                records = result.records;
+                            }
 
-                                    fs.writeFile(fileName, content, function(err) {
-                                        if (err)
-                                            return console.log(err);
-                                        console.log(fileName);
-                                    });
-                                }
-                            })
+                            // call succeded 
+                            records.forEach(function(item) {
+                                var sys_id = item.sys_id;
+                                var name = item.name;
+                                var fileName = log + sys_id + "_" + name.replace(' ', '_') + ".txt";
+                                var content = 'Update set ' + name + ' committed at ' + new Date();
+
+                                browser.get(server + 'sys_remote_update_set.do?sys_id=' + sys_id);
+
+                                //preview update set
+                                browser.executeScript("document.getElementById('preview_update_set').click()");
+                                browser.sleep(delay);
+                                //preview has error
+                                browser.isElementPresent(webdriver.By.id("hierarchical_progress_viewer")).then(function(result) {
+                                    if (result) {
+                                        client.getRecords("sys_update_preview_problem", "remote_update_set=" + sys_id, function(error, result) {
+                                            if (!error) {
+                                                var data = result.records;
+                                                var problems = "Update set " + name + " has error: ";
+                                                data.forEach(function(element) {
+                                                    problems += element.description;
+                                                }, this);
+                                                fs.writeFile(fileName, problems, function(err) {
+                                                    if (err)
+                                                        return console.log(err);
+                                                    console.log(fileName);
+                                                });
+                                            }
+                                        });
+
+                                    } else {
+                                        //show commit button
+                                        browser.isElementPresent(webdriver.By.id("c38b2cab0a0a0b5000470398d9e60c36")).then(function(result) {
+                                            if (result) {
+                                                //commit update set
+                                                browser.executeScript("document.getElementsByClassName('form_action_button header  action_context btn btn-default')[3].click()");
+                                                browser.wait(function() {
+                                                    return browser.isElementPresent(webdriver.By.id("sysparm_button_close"));
+                                                }, timeout);
+                                                browser.findElement(webdriver.By.id("sysparm_button_close")).click();
+
+                                                fs.writeFile(fileName, content, function(err) {
+                                                    if (err)
+                                                        return console.log(err);
+                                                    console.log(fileName);
+                                                });
+                                            }
+                                        })
+                                    }
+                                });
+
+                            }, this);
+
+                            browser.quit();
                         }
                     });
-
-                }, this);
-
-                browser.quit();
+                });
             }
         });
+
     });
-
-
-
-
-
-
-
 
 }
