@@ -14,7 +14,7 @@ var timeout = 20000;
 var delay = 5000;
 
 
-exports.deploy = function(server, username, password, path) {
+exports.deploy = function(server, username, password, path, log) {
     var config = {
         instance: server,
         username: username,
@@ -98,7 +98,7 @@ exports.deploy = function(server, username, password, path) {
                 records.forEach(function(item) {
                     var sys_id = item.sys_id;
                     var name = item.name;
-                    var fileName = path + "logs//" + sys_id + "_" + name.replace(' ', '_') + ".txt";
+                    var fileName = log + sys_id + "_" + name.replace(' ', '_') + ".txt";
                     var content = 'Update set ' + name + ' committed at ' + new Date();
 
                     browser.get(server + 'sys_remote_update_set.do?sys_id=' + sys_id);

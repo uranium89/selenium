@@ -1,3 +1,3 @@
 # selenium
 Run this code 
-node app.js https://your-intance.service-now.com/ username password "Jenkin_logs_folder"
+node app.js https://your-intance.service-now.com/ username password "Jenkin_folder" "log_folder"
